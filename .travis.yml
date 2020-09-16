@@ -1,0 +1,36 @@
+language: python
+sudo: True
+cache: pip
+os:
+    - linux
+services:
+  - postgresql
+dist: focal
+python:
+  - 3.8
+  - 3.6
+  - 3.7
+# pypy3.5 not yet supported due to compilation errors with pyephem
+# https://github.com/celery/django-celery-beat/issues/245
+#  - pypy3.5
+env:
+  - DJANGO=2.2
+  - DJANGO=3.0
+
+matrix:
+  include:
+    - { python: 3.8, env: TOXENV=flake8 }
+    - { python: 3.8, env: TOXENV=pydocstyle }
+    - { python: 3.8, env: TOXENV=cov }
+    - { python: 3.8, env: TOXENV=integration }
+    # disabled temporarily due to upstream bug
+    # https://github.com/celery/sphinx_celery/issues/9
+    # - { python: 3.5, env: TOXENV=apicheck }
+    # - { python: 3.5, env: TOXENV=linkcheck }
+
+
+install: travis_retry pip install -U tox-travis
+script: tox -v -- -v
+after_success:
+  - .tox/$TRAVIS_PYTHON_VERSION/bin/coverage xml
+  - .tox/$TRAVIS_PYTHON_VERSION/bin/codecov -e TOXENV
