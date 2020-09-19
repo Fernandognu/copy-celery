@@ -134,4 +134,43 @@ class TaskResultManager(models.Manager):
             'task_kwargs': task_kwargs,
             'worker': worker
         }
-        
+        obj, created = self.using(using).get_or_create(task_id=task_id,
+                                                        default=fields)
+        if not created:
+            for k, v in items(fields):
+                setattr(obj, k, v)
+            obj.save(using=using)
+        return obj
+
+    def warn_if_repeatable_read(self):
+        if 'mysql' in self.current_engine().lower():
+            cursor = self.connection_for_read().cursor()
+            # Mariadb and MySQL since 8.0 have different transaction isolation
+            # variables: the former has tx_isolation, white the latter has
+            # transaction_isolation
+            if cursor.execute("SHOW VARIABLES WHERE variable_name IN "
+                              "('tx_isolation', 'transaction_isolation');"):
+                isolation = cursor.fetchone()[1]
+                if isolation == 'REPEATABLE-READ':
+                    warnings.warn(TxIsolationWarning(W_ISOLATION_REP.strip()))
+
+    def connection_for_write(self):
+        return connections[router.db_for_write(self.mode)]
+
+    def connection_for_read(self):
+        return connections[self.db]
+
+    def current_engine(self):
+        try:
+            return settings.DATABASES[self.db]['ENGINE']
+        except AttributeError:
+            return settings.DATABASE_ENGINE
+
+        def get_all_expired(self, expires):
+            """Get all expired task results."""
+            return self.filter(date_done_lt=now() - maybe_timedelta(expires))
+
+        def delete_expired(self, expires):
+            """Delete all expired results."""
+            with transaction.atomic():
+                self.get_all_expired(expires).delete()
